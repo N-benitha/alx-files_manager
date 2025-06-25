@@ -1,70 +1,87 @@
-import { env } from 'process';
-import { MongoClient, ObjectId } from 'mongodb';
+import { MongoClient } from 'mongodb';
 
-// eslint-disable-next-line import/prefer-default-export
-export class DBClient {
+class DBClient {
   constructor() {
-    const host = env.DB_PORT ? env.DB_PORT : '127.0.0.1';
-    const port = env.DB_HOST ? env.DB_HOST : 27017;
-    const database = env.DB_DATABASE ? env.DB_DATABASE : 'files_manager';
-    this.myClient = MongoClient(`mongodb://${host}:${port}/${database}`);
-    this.myClient.connect();
+    // Get environment variables or use defaults
+    const host = process.env.DB_HOST || 'localhost';
+    const port = process.env.DB_PORT || 27017;
+    const database = process.env.DB_DATABASE || 'files_manager';
+    
+    // Create MongoDB connection URL
+    this.url = `mongodb://${host}:${port}`;
+    this.dbName = database;
+    
+    // Initialize connection state
+    this.client = null;
+    this.db = null;
+    this.connected = false;
+    
+    // Connect to MongoDB
+    this.connect();
   }
 
-  isAlive() {
-    return this.myClient.isConnected();
-  }
-
-  async nbUsers() {
-    /* returns number of documents in the collection users */
-    const myDB = this.myClient.db();
-    const myCollection = myDB.collection('users');
-    return myCollection.countDocuments();
-  }
-
-  async nbFiles() {
-    /* returns number of documents in the collection files */
-    const myDB = this.myClient.db();
-    const myCollection = myDB.collection('files');
-    return myCollection.countDocuments();
-  }
-
-  async userExists(email) {
-    /* returns true if the user with the given email exists */
-    const myDB = this.myClient.db();
-    const myCollection = myDB.collection('users');
-    return myCollection.findOne({ email });
-  }
-
-  async newUser(email, passwordHash) {
-    /* creates a new user with the given email and passwordHash */
-    const myDB = this.myClient.db();
-    const myCollection = myDB.collection('users');
-    return myCollection.insertOne({ email, passwordHash });
-  }
-
-  async filterUser(filters) {
-    const myDB = this.myClient.db();
-    const myCollection = myDB.collection('users');
-    if ('_id' in filters) {
-      // eslint-disable-next-line no-param-reassign
-      filters._id = ObjectId(filters._id);
+  /**
+   * Connect to MongoDB
+   */
+  async connect() {
+    try {
+      this.client = new MongoClient(this.url, {
+        useUnifiedTopology: true,
+        useNewUrlParser: true,
+      });
+      
+      await this.client.connect();
+      this.db = this.client.db(this.dbName);
+      this.connected = true;
+    } catch (error) {
+      console.error('MongoDB connection error:', error);
+      this.connected = false;
     }
-    return myCollection.findOne(filters);
   }
 
-  async filterFiles(filters) {
-    const myDB = this.myClient.db();
-    const myCollection = myDB.collection('files');
-    const idFilters = ['_id', 'userId', 'parentId'].filter((prop) => prop in filters && filters[prop] !== '0');
-    idFilters.forEach((i) => {
-      // eslint-disable-next-line no-param-reassign
-      filters[i] = ObjectId(filters[i]);
-    });
-    return myCollection.findOne(filters);
+  /**
+   * Check if MongoDB connection is alive
+   * @returns {boolean} true if connected, false otherwise
+   */
+  isAlive() {
+    return this.connected && this.client && this.client.topology && this.client.topology.isConnected();
+  }
+
+  /**
+   * Get the number of documents in the users collection
+   * @returns {Promise<number>} Number of users
+   */
+  async nbUsers() {
+    try {
+      if (!this.isAlive()) {
+        return 0;
+      }
+      const collection = this.db.collection('users');
+      return await collection.countDocuments();
+    } catch (error) {
+      console.error('Error counting users:', error);
+      return 0;
+    }
+  }
+
+  /**
+   * Get the number of documents in the files collection
+   * @returns {Promise<number>} Number of files
+   */
+  async nbFiles() {
+    try {
+      if (!this.isAlive()) {
+        return 0;
+      }
+      const collection = this.db.collection('files');
+      return await collection.countDocuments();
+    } catch (error) {
+      console.error('Error counting files:', error);
+      return 0;
+    }
   }
 }
 
+// Create and export an instance of DBClient
 const dbClient = new DBClient();
-
 export default dbClient;
