@@ -1,4 +1,4 @@
-import { MongoClient } from 'mongodb';
+import { MongoClient, ObjectId } from 'mongodb';
 
 class DBClient {
   constructor() {
@@ -78,6 +78,86 @@ class DBClient {
     } catch (error) {
       console.error('Error counting files:', error);
       return 0;
+    }
+  }
+
+  /**
+   * Check if user exists by email
+   * @param {string} email - User email
+   * @returns {Promise<Object|null>} User document or null
+   */
+  async userExists(email) {
+    try {
+      if (!this.isAlive()) {
+        return null;
+      }
+      const collection = this.db.collection('users');
+      return await collection.findOne({ email });
+    } catch (error) {
+      console.error('Error checking user existence:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Create a new user
+   * @param {string} email - User email
+   * @param {string} passwordHash - Hashed password
+   * @returns {Promise<Object>} Insert result
+   */
+  async newUser(email, passwordHash) {
+    try {
+      if (!this.isAlive()) {
+        throw new Error('Database not connected');
+      }
+      const collection = this.db.collection('users');
+      return await collection.insertOne({ email, password: passwordHash });
+    } catch (error) {
+      console.error('Error creating user:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Find user by filters
+   * @param {Object} filters - Search filters
+   * @returns {Promise<Object|null>} User document or null
+   */
+  async filterUser(filters) {
+    try {
+      if (!this.isAlive()) {
+        return null;
+      }
+      const collection = this.db.collection('users');
+      if ('_id' in filters) {
+        filters._id = new ObjectId(filters._id);
+      }
+      return await collection.findOne(filters);
+    } catch (error) {
+      console.error('Error filtering user:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Find file by filters
+   * @param {Object} filters - Search filters
+   * @returns {Promise<Object|null>} File document or null
+   */
+  async filterFiles(filters) {
+    try {
+      if (!this.isAlive()) {
+        return null;
+      }
+      const collection = this.db.collection('files');
+      const idFilters = ['_id', 'userId', 'parentId'].filter((prop) => prop in filters && filters[prop] !== '0');
+      idFilters.forEach((i) => {
+        filters[i] = new ObjectId(filters[i]);
+      });
+      return await collection.findOne(filters);
+    } catch (error) {
+      console.error('Error filtering files:', error);
+      return null;
     }
   }
 }
