@@ -12,20 +12,46 @@ export default class UsersController {
       try {
         const passwordHash = UtilController.SHA1(password);
         const insert = await dbClient.newUser(email, passwordHash);
-        const { _id } = insert.ops[0];
-        const _email = insert.ops[0].email;
-        response.status(201).json({ id: _id, email: _email }).end();
+
+        return response.status(201).json({ 
+        	id: insert.insertedId,
+        	email: email
+      	});
       } catch (err) {
-        response.status(400).json({ error: err.message }).end();
+        return response.status(400).json({ error: err.message });
       }
     }
   }
 
-  static async getMe(request, response) {
-    const { usr } = request;
-    delete usr.password;
-    usr.id = usr._id;
-    delete usr._id;
-    response.status(200).json(usr).end();
-  }
+	static async getMe(request, response) {
+  	try {
+    	// Get token from X-Token header
+    	const token = request.headers['x-token'];
+
+    	// Retrieve the user based on the token
+    	const userId = await redisClient.get(`auth_${token}`);
+
+    	// If not found, return error Unauthorized with status code 401
+    	if (!userId) {
+      		return response.status(401).json({ error: 'Unauthorized' });
+    	}
+
+    	// Get user from database using the userId
+    	const user = await dbClient.filterUser({ _id: userId });
+
+   	// If user not found, return error Unauthorized with status code 401
+    	if (!user) {
+      		return response.status(401).json({ error: 'Unauthorized' });
+    	}
+
+    	// Return the user object (email and id only)
+   	return response.status(200).json({
+      		id: user._id,
+      		email: user.email
+    	});
+
+  	} catch (error) {
+    	// If any error occurs, return Unauthorized
+    	return response.status(401).json({ error: 'Unauthorized' });
+  	}}
 }
